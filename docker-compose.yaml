@@ -1,0 +1,105 @@
+services:
+  consul:
+    image: hashicorp/consul:latest
+    container_name: consul
+    ports:
+      - "8500:8500"
+    command: agent -dev -client=0.0.0.0
+    networks:
+      - micro_net
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - micro_net
+
+  api_gateway:
+    build: ./api_gateway
+    container_name: api_gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - MEASUREMENT_SERVICE_URL=http://measurement_service:8003
+    depends_on:
+      - consul
+    networks:
+      - micro_net
+
+  user_service:
+    build: ./user_service
+    environment:
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - SERVICE_PORT=8001
+    depends_on:
+      - consul
+    networks:
+      - micro_net
+    deploy:
+      replicas: 3
+
+  child_profile_service:
+    build: ./child_profile_service
+    container_name: child_profile_service
+    ports:
+      - "8002:8002"
+    environment:
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    depends_on:
+      - consul
+    networks:
+      - micro_net
+
+  measurement_service:
+    build: ./measurement_service
+    container_name: measurement_service
+    ports:
+      - "8003:8003"
+    environment:
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - consul
+      - rabbitmq
+    networks:
+      - micro_net
+
+  notification_service:
+    build: ./notification_service
+    container_name: notification_service
+    ports:
+      - "8004:8004"
+    environment:
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - consul
+      - rabbitmq
+    networks:
+      - micro_net
+
+  analytics_service:
+    build: ./analytics_service
+    container_name: analytics_service
+    ports:
+      - "8005:8005"
+    environment:
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    depends_on:
+      - consul
+    networks:
+      - micro_net
+
+networks:
+  micro_net:
+    driver: bridge
