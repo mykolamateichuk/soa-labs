@@ -16,6 +16,9 @@ SERVICE_PORT = 8004
 CONSUL_HOST = "consul"
 CONSUL_PORT = 8500
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
+NOTIFY_QUEUE = "notify_queue"
+DLX_NAME = "measurement_dlx"
+DLQ_NAME = "measurement_dlq"
 
 def register_service():
     requests.put(
@@ -74,9 +77,24 @@ def consume():
         return
 
     channel = connection.channel()
-    channel.queue_declare(queue='notify_queue', durable=True)
+    
+    # Declare DLX and DLQ (must match measurement_service configuration)
+    channel.exchange_declare(exchange=DLX_NAME, exchange_type='direct', durable=True)
+    channel.queue_declare(queue=DLQ_NAME, durable=True)
+    channel.queue_bind(exchange=DLX_NAME, queue=DLQ_NAME, routing_key=DLQ_NAME)
+    
+    # Declare main queue with DLX configuration - failed messages go to DLQ
+    channel.queue_declare(
+        queue=NOTIFY_QUEUE,
+        durable=True,
+        arguments={
+            'x-dead-letter-exchange': DLX_NAME,
+            'x-dead-letter-routing-key': DLQ_NAME
+        }
+    )
+    
     channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue='notify_queue', on_message_callback=callback)
+    channel.basic_consume(queue=NOTIFY_QUEUE, on_message_callback=callback)
     print("Waiting for a response from RabbitMQ...")
     channel.start_consuming()
 
